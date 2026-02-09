@@ -13,12 +13,12 @@
 #include <math.h>
 #include <ArduinoBLE.h>
 
-#include  <Filters.h>
-#include <Filters/Butterworth.hpp>
+// #include  <Filters.h>
+// #include <Filters/Butterworth.hpp>
 
-const double f_c = 6; // Hz
+// const double f_c = 6; // Hz
 
-auto filter = butter<4>(f_c)
+// auto filter = butter<4>(f_c)
 
 // ===== IMU =====
 LSM6DS3 imu(I2C_MODE, 0x6A);
