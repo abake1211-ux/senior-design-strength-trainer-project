@@ -188,31 +188,38 @@ void processExercise() {
       return;
     }
     
+    // Modified so code always is either bicep curl or bench press
+
     // One axis moved! Determine dominant axis
     if (az_phase == PHASE_ASCENDING) {
       // Y-axis moved first → Bicep Curl
-      currentExercise = EXERCISE_BICEP_CURL;
-      activePhase = ay_phase;
-      Serial.println("EXERCISE_DETECTED: BICEP_CURL (Y-axis active)");
+      currentExercise = EXERCISE_BENCH_PRESS; // MODIFIED
+      activePhase = ax_phase;                 // MODIFIED
+      // Serial.println("EXERCISE_DETECTED: BICEP_CURL (Y-axis active)");
     } else if (az_phase == PHASE_DESCENDING) {
       // Z-axis moved first → Bench Press
       currentExercise = EXERCISE_BENCH_PRESS;
       activePhase = az_phase;
-      Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Z-axis active)");
+      // Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Z-axis active)");
     } else {
-      // Both moved simultaneously - pick the one with larger slope magnitude
-      float ay_slope = fabs(getPhaseSlope(true));
-      float az_slope = fabs(getPhaseSlope(false));
+
+      currentExercise = EXERCISE_BENCH_PRESS;
+      activePhase = az_phase;
       
-      if (ay_slope > az_slope) {
-        currentExercise = EXERCISE_BICEP_CURL;
-        activePhase = ay_phase;
-        Serial.println("EXERCISE_DETECTED: BICEP_CURL (Y-axis larger slope)");
-      } else {
-        currentExercise = EXERCISE_BENCH_PRESS;
-        activePhase = az_phase;
-        Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Z-axis larger slope)");
-      }
+      // // Both moved simultaneously - pick the one with larger slope magnitude
+      // float ay_slope = fabs(getPhaseSlope(true));
+      // float az_slope = fabs(getPhaseSlope(false));
+    
+
+      // if (ay_slope > az_slope) {
+      //   currentExercise = EXERCISE_BICEP_CURL;
+      //   activePhase = ay_phase;
+      //   Serial.println("EXERCISE_DETECTED: BICEP_CURL (Y-axis larger slope)");
+      // } else {
+      //   currentExercise = EXERCISE_BENCH_PRESS;
+      //   activePhase = az_phase;
+      //   Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Z-axis larger slope)");
+      // }
     }
     
     flatPhaseStartTime = millis();
