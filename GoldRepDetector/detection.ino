@@ -135,37 +135,33 @@ void updateBicepCurlReps(ConfirmedMotionPhase newPhase) {
 
 // ===== BENCH PRESS REP COUNTER =====
 void updateBenchPressReps(ConfirmedMotionPhase newPhase) {
-  // Valley detection: DESC → FLAT → ASC → FLAT
+  // New logic: DESC → ASC (optional FLAT) → FLAT → count
   switch (valleyState) {
+
     case VALLEY_IDLE:
       if (newPhase == PHASE_DESCENDING) {
         valleyState = VALLEY_SAW_DESC;
       }
       break;
-      
+
     case VALLEY_SAW_DESC:
-      if (newPhase == PHASE_FLAT) {
-        valleyState = VALLEY_SAW_FLAT1;
-      } else if (newPhase == PHASE_ASCENDING) {
-        valleyState = VALLEY_SAW_ASC;
-      }
-      break;
-      
-    case VALLEY_SAW_FLAT1:
+      // Once we see ASCENDING, we know upward phase has started
       if (newPhase == PHASE_ASCENDING) {
         valleyState = VALLEY_SAW_ASC;
-      } else if (newPhase == PHASE_DESCENDING) {
-        valleyState = VALLEY_SAW_DESC;
       }
+      // Ignore flat here — do NOT require bottom flat
       break;
-      
+
     case VALLEY_SAW_ASC:
+      // Wait for final FLAT to confirm rep
       if (newPhase == PHASE_FLAT) {
         repCount++;
         Serial.print("REP_COUNTED,total=");
         Serial.println(repCount);
         valleyState = VALLEY_IDLE;
-      } else if (newPhase == PHASE_DESCENDING) {
+      }
+      // If user drops back down before reaching flat, restart
+      else if (newPhase == PHASE_DESCENDING) {
         valleyState = VALLEY_SAW_DESC;
       }
       break;
