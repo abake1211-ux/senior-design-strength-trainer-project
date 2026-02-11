@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMU Acceleration Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(30, 30, 46, 0.9);
+            border-radius: 20px;
+            padding: 15px;
+            max-width: 1400px;
+            margin: 0 auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid #3b82f6;
+        }
+        .status.connected {
+            background: rgba(34, 197, 94, 0.2);
+            border-color: #22c55e;
+        }
+        .status .indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3b82f6;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        .status.connected .indicator {
+            background: #22c55e;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .btn-connect {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+        }
+        .btn-disconnect {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+        .btn-clear {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+            color: white;
+        }
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .data-box {
+            background: rgba(55, 65, 81, 0.5);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        .data-box:hover {
+            transform: translateY(-2px);
+        }
+        .data-box.ax {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+        .data-box.ay {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+        }
+        .data-box.az {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+        }
+        .data-box.gx {
+            border-color: #edf50b;
+            background: rgba(245, 237, 11, 0.1);
+        }
+        .data-box.gy {
+            border-color: #f50bde;
+            background: rgba(245, 11, 226, 0.1);
+        }
+        .data-box.gz {
+            border-color: #0bf5e5;
+            background: rgba(11, 245, 245, 0.1);
+        }
+        .data-label {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            opacity: 0.9;
+        }
+        .data-value {
+            font-size: 28px;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+        }
+        .ax .data-label { color: #ef4444; }
+        .ay .data-label { color: #22c55e; }
+        .az .data-label { color: #3b82f6; }
+        .gx .data-label { color: #edf50b; }
+        .gy .data-label { color: #f50bde; }
+        .gz .data-label { color: #0bf5e5; }
+        .canvas-container {
+            background: #0a0a0a;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        canvas {
+            border-radius: 8px;
+            display: block;
+        }
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 18px;
+            font-size: 12px;
+        }
+        .legend-item {
+            background: rgba(55, 65, 81, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .legend-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .settings {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .setting-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .setting-group label {
+            font-size: 14px;
+        }
+        .setting-group input[type="range"] {
+            width: 150px;
+        }
+        .setting-group span {
+            font-family: 'Courier New', monospace;
+            min-width: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Accel and Gyro Visualizer</h1>
+        
+        <div class="status" id="status">
+            <span class="indicator"></span>
+            <span id="statusText">Ready - Click Connect</span>
+        </div>
+
+        <div class="controls">
+            <button class="btn-connect" id="connectBtn" onclick="connectSerial()">
+                ▶ Connect to Arduino
+            </button>
+            <button class="btn-disconnect" id="disconnectBtn" onclick="disconnect()" style="display: none;">
+                ⏸ Disconnect
+            </button>
+            <button class="btn-clear" onclick="clearData()">
+                🗑️ Clear Plot
+            </button>
+        </div>
+
+        <div class="settings">
+            <div class="setting-group">
+                <label>Time Window:</label>
+                <input type="range" id="timeWindow" min="5" max="60" value="30" step="5">
+                <span id="timeWindowValue">30s</span>
+            </div>
+            <div class="setting-group">
+                <label>Y-Axis Range:</label>
+                <input type="range" id="yRange" min="1" max="5" value="2" step="0.5">
+                <span id="yRangeValue">±2g</span>
+            </div>
+        </div>
+
+        <div class="data-grid">
+            <div class="data-box ax">
+                <div class="data-label">X ACCEL</div>
+                <div class="data-value" id="axValue">0.0000 g</div>
+            </div>
+            <div class="data-box ay">
+                <div class="data-label">Y ACCEL</div>
+                <div class="data-value" id="ayValue">0.0000 g</div>
+            </div>
+            <div class="data-box az">
+                <div class="data-label">Z ACCEL</div>
+                <div class="data-value" id="azValue">0.0000 g</div>
+            </div>
+            <div class="data-box gx">
+                <div class="data-label">X GYRO</div>
+                <div class="data-value" id="gxValue">0.0000 °/s</div>
+            </div>
+            <div class="data-box gy">
+                <div class="data-label">Y GYRO</div>
+                <div class="data-value" id="gyValue">0.0000 °/s</div>
+            </div>
+            <div class="data-box gz">
+                <div class="data-label">Z GYRO</div>
+                <div class="data-value" id="gzValue">0.0000 °/s</div>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas" width="1300" height="500"></canvas>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #ef4444;"></span>
+                Red = X Acceleration
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #22c55e;"></span>
+                Green = Y Acceleration
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #3b82f6;"></span>
+                Blue = Z Acceleration
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #edf50b;"></span>
+                Yellow = X Gyro
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #f50bde;"></span>
+                 Magenta = Y Gyro
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #0bf5e5;"></span>
+                Cyan = Z Gyro
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let port = null;
+        let reader = null;
+        let dataCount = 0;
+        
+        // Data storage
+        let timeData = [];
+        let axData = [];
+        let ayData = [];
+        let azData = [];
+        let gxData = [];
+        let gyData = [];
+        let gzData = [];
+        let startTime = Date.now();
+        
+        // Settings
+        let timeWindow = 30;
+        let yRange = 2;
+
+        document.getElementById('timeWindow').addEventListener('input', (e) => {
+            timeWindow = parseInt(e.target.value);
+            document.getElementById('timeWindowValue').textContent = timeWindow + 's';
+        });
+
+        document.getElementById('yRange').addEventListener('input', (e) => {
+            yRange = parseFloat(e.target.value);
+            document.getElementById('yRangeValue').textContent = '±' + yRange + 'g';
+        });
+
+        function updatePhaseDisplay(phase) {
+            const phaseBox = document.getElementById('phaseBox');
+            const phaseValue = document.getElementById('phaseValue');
+            
+            phaseBox.className = 'data-box phase';
+            phaseValue.textContent = phase;
+            
+            const phaseLower = phase.toLowerCase();
+            if (phaseLower === 'concentric' || phaseLower === 'eccentric' || phaseLower === 'ready') {
+                phaseBox.classList.add(phaseLower);
+            }
+        }
+
+        function draw() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, width, height);
+
+            const currentTime = (Date.now() - startTime) / 1000;
+            const minTime = Math.max(0, currentTime - timeWindow);
+            const maxTime = currentTime;
+
+
+            // Draw grid
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+            
+            for (let g = -yRange; g <= yRange; g += 0.5) {
+                const y = height/2 - (g / yRange) * (height/2 - 20);
+                ctx.beginPath();
+                ctx.moveTo(40, y);
+                ctx.lineTo(width - 20, y);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#666';
+                ctx.font = '12px monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText(g.toFixed(1) + 'g', 35, y + 4);
+            }
+            
+            const timeStep = timeWindow > 20 ? 5 : 2;
+            for (let t = Math.ceil(minTime / timeStep) * timeStep; t <= maxTime; t += timeStep) {
+                const x = 40 + ((t - minTime) / timeWindow) * (width - 60);
+                ctx.beginPath();
+                ctx.moveTo(x, 20);
+                ctx.lineTo(x, height - 20);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#666';
+                ctx.font = '12px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(t.toFixed(0) + 's', x, height - 5);
+            }
+
+            // Draw center line
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(40, height/2);
+            ctx.lineTo(width - 20, height/2);
+            ctx.stroke();
+
+            const drawLine = (data, color, lineWidth = 2) => {
+                if (data.length < 2) return;
+                
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.beginPath();
+                
+                let started = false;
+                for (let i = 0; i < timeData.length; i++) {
+                    const t = timeData[i];
+                    if (t < minTime || t > maxTime) continue;
+                    
+                    const x = 40 + ((t - minTime) / timeWindow) * (width - 60);
+                    const y = height/2 - (data[i] / yRange) * (height/2 - 20);
+                    const clampedY = Math.max(20, Math.min(height - 20, y));
+                    
+                    if (!started) {
+                        ctx.moveTo(x, clampedY);
+                        started = true;
+                    } else {
+                        ctx.lineTo(x, clampedY);
+                    }
+                }
+                ctx.stroke();
+            };
+
+            drawLine(axData, '#ef4444');
+            drawLine(ayData, '#22c55e');
+            drawLine(azData, '#3b82f6');
+            drawLine(gxData, '#edf50b');
+            drawLine(gyData, '#f50bde');
+            drawLine(gzData, '#0bf5e5');
+
+            requestAnimationFrame(draw);
+        }
+
+        async function connectSerial() {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('disconnectBtn').style.display = 'flex';
+                document.getElementById('status').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Connected - Receiving data...';
+                
+                startTime = Date.now();
+                startReading();
+            } catch (err) {
+                alert('Connection failed: ' + err.message);
+            }
+        }
+
+        async function startReading() {
+            const textDecoder = new TextDecoderStream();
+            port.readable.pipeTo(textDecoder.writable);
+            reader = textDecoder.readable.getReader();
+
+            let buffer = '';
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += value;
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    lines.forEach(line => {
+                        const parts = line.trim().split(',');
+                        if (parts.length === 6) {
+                            const ax = parseFloat(parts[0]);
+                            const ay = parseFloat(parts[1]);
+                            const az = parseFloat(parts[2]);
+                            const gx = parseFloat(parts[3]);
+                            const gy = parseFloat(parts[4]);
+                            const gz = parseFloat(parts[5]);
+                            
+                            if (!isNaN(ax) && !isNaN(ay) && !isNaN(az) && !isNaN(gx) && !isNaN(gy)&& !isNaN(gz)) {
+                                const currentTime = (Date.now() - startTime) / 1000;
+                                
+                                timeData.push(currentTime);
+                                axData.push(ax);
+                                ayData.push(ay);
+                                azData.push(az);
+                                gxData.push(gx);
+                                gyData.push(gy);
+                                gzData.push(gz);
+
+
+                                
+                                const cutoffTime = currentTime - timeWindow - 5;
+                                while (timeData.length > 0 && timeData[0] < cutoffTime) {
+                                    timeData.shift();
+                                    axData.shift();
+                                    ayData.shift();
+                                    azData.shift();
+                                    gxData.shift();
+                                    gyData.shift();
+                                    gzData.shift();
+
+                                }
+                                
+                                document.getElementById('axValue').textContent = ax.toFixed(4) + 'g';
+                                document.getElementById('ayValue').textContent = ay.toFixed(4) + 'g';
+                                document.getElementById('azValue').textContent = az.toFixed(4) + 'g';
+                                document.getElementById('gxValue').textContent = gx.toFixed(4) + ' °/s';
+                                document.getElementById('gyValue').textContent = gy.toFixed(4) + ' °/s';
+                                document.getElementById('gzValue').textContent = gz.toFixed(4) + ' °/s';
+                                dataCount++;
+                                document.getElementById('statusText').textContent = `Connected - ${dataCount} samples`;
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Reading error:', err);
+            }
+        }
+
+        async function disconnect() {
+            if (reader) {
+                await reader.cancel();
+                reader = null;
+            }
+            if (port) {
+                await port.close();
+                port = null;
+            }
+            
+            document.getElementById('connectBtn').style.display = 'flex';
+            document.getElementById('disconnectBtn').style.display = 'none';
+            document.getElementById('status').classList.remove('connected');
+            document.getElementById('statusText').textContent = 'Disconnected';
+        }
+
+        function clearData() {
+            timeData = [];
+            axData = [];
+            ayData = [];
+            azData = [];
+            gxData = [];
+            gyData = [];
+            gzData = [];
+
+            startTime = Date.now();
+            dataCount = 0;
+            updatePhaseDisplay('READY');
+            document.getElementById('statusText').textContent = port ? 'Connected - Data cleared' : 'Ready - Click Connect';
+        }
+
+        draw();
+    </script>
+</body>
+</html>
