@@ -159,9 +159,12 @@
             border-radius: 12px;
             padding: 10px;
             margin-bottom: 20px;
-            overflow-x: auto;
+            width: 100%;
         }
+
         canvas {
+            width: 100%;
+            height: 45vh;   /* Each takes roughly half the screen vertically */
             border-radius: 8px;
             display: block;
         }
@@ -268,9 +271,13 @@
                 <div class="data-value" id="gzValue">0.0000 °/s</div>
             </div>
         </div>
+        
+        <div class="canvas-container">
+            <canvas id="accelCanvas"></canvas>
+        </div>
 
         <div class="canvas-container">
-            <canvas id="canvas" width="1300" height="500"></canvas>
+            <canvas id="gyroCanvas"></canvas>
         </div>
 
         <div class="legend">
@@ -344,8 +351,18 @@
         }
 
         function draw() {
-            const canvas = document.getElementById('canvas');
+            drawAccelerometer();
+            drawGyroscope();
+            requestAnimationFrame(draw);
+        }
+        
+        function drawAccelerometer() {
+            const canvas = document.getElementById('accelCanvas');
             const ctx = canvas.getContext('2d');
+
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
             const width = canvas.width;
             const height = canvas.height;
 
@@ -356,62 +373,38 @@
             const minTime = Math.max(0, currentTime - timeWindow);
             const maxTime = currentTime;
 
-
-            // Draw grid
             ctx.strokeStyle = '#1a1a1a';
             ctx.lineWidth = 1;
-            
+
             for (let g = -yRange; g <= yRange; g += 0.5) {
                 const y = height/2 - (g / yRange) * (height/2 - 20);
                 ctx.beginPath();
                 ctx.moveTo(40, y);
                 ctx.lineTo(width - 20, y);
                 ctx.stroke();
-                
+
                 ctx.fillStyle = '#666';
                 ctx.font = '12px monospace';
                 ctx.textAlign = 'right';
                 ctx.fillText(g.toFixed(1) + 'g', 35, y + 4);
             }
-            
-            const timeStep = timeWindow > 20 ? 5 : 2;
-            for (let t = Math.ceil(minTime / timeStep) * timeStep; t <= maxTime; t += timeStep) {
-                const x = 40 + ((t - minTime) / timeWindow) * (width - 60);
-                ctx.beginPath();
-                ctx.moveTo(x, 20);
-                ctx.lineTo(x, height - 20);
-                ctx.stroke();
-                
-                ctx.fillStyle = '#666';
-                ctx.font = '12px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(t.toFixed(0) + 's', x, height - 5);
-            }
 
-            // Draw center line
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(40, height/2);
-            ctx.lineTo(width - 20, height/2);
-            ctx.stroke();
-
-            const drawLine = (data, color, lineWidth = 2) => {
+            const drawLine = (data, color) => {
                 if (data.length < 2) return;
-                
+
                 ctx.strokeStyle = color;
-                ctx.lineWidth = lineWidth;
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                
+
                 let started = false;
                 for (let i = 0; i < timeData.length; i++) {
                     const t = timeData[i];
                     if (t < minTime || t > maxTime) continue;
-                    
+
                     const x = 40 + ((t - minTime) / timeWindow) * (width - 60);
                     const y = height/2 - (data[i] / yRange) * (height/2 - 20);
                     const clampedY = Math.max(20, Math.min(height - 20, y));
-                    
+
                     if (!started) {
                         ctx.moveTo(x, clampedY);
                         started = true;
@@ -425,28 +418,93 @@
             drawLine(axData, '#ef4444');
             drawLine(ayData, '#22c55e');
             drawLine(azData, '#3b82f6');
+        }
+
+        function drawGyroscope() {
+            const canvas = document.getElementById('gyroCanvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, width, height);
+
+            const currentTime = (Date.now() - startTime) / 1000;
+            const minTime = Math.max(0, currentTime - timeWindow);
+            const maxTime = currentTime;
+
+            // Auto scale gyro range
+            const recentGyro = [...gxData, ...gyData, ...gzData];
+            const maxGyro = Math.max(50, ...recentGyro.map(v => Math.abs(v)));
+            const gyroRange = maxGyro * 1.2;
+
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+
+            for (let g = -gyroRange; g <= gyroRange; g += gyroRange/4) {
+                const y = height/2 - (g / gyroRange) * (height/2 - 20);
+                ctx.beginPath();
+                ctx.moveTo(40, y);
+                ctx.lineTo(width - 20, y);
+                ctx.stroke();
+
+                ctx.fillStyle = '#666';
+                ctx.font = '12px monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText(g.toFixed(0) + '°/s', 35, y + 4);
+            }
+
+            const drawLine = (data, color) => {
+                if (data.length < 2) return;
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                let started = false;
+                for (let i = 0; i < timeData.length; i++) {
+                    const t = timeData[i];
+                    if (t < minTime || t > maxTime) continue;
+
+                    const x = 40 + ((t - minTime) / timeWindow) * (width - 60);
+                    const y = height/2 - (data[i] / gyroRange) * (height/2 - 20);
+                    const clampedY = Math.max(20, Math.min(height - 20, y));
+
+                    if (!started) {
+                        ctx.moveTo(x, clampedY);
+                        started = true;
+                    } else {
+                        ctx.lineTo(x, clampedY);
+                    }
+                }
+                ctx.stroke();
+            };
+
             drawLine(gxData, '#edf50b');
             drawLine(gyData, '#f50bde');
             drawLine(gzData, '#0bf5e5');
-
-            requestAnimationFrame(draw);
         }
 
-        async function connectSerial() {
-            try {
-                port = await navigator.serial.requestPort();
-                await port.open({ baudRate: 115200 });
-                
-                document.getElementById('connectBtn').style.display = 'none';
-                document.getElementById('disconnectBtn').style.display = 'flex';
-                document.getElementById('status').classList.add('connected');
-                document.getElementById('statusText').textContent = 'Connected - Receiving data...';
-                
-                startTime = Date.now();
-                startReading();
-            } catch (err) {
-                alert('Connection failed: ' + err.message);
-            }
+
+            async function connectSerial() {
+                try {
+                    port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: 115200 });
+                    
+                    document.getElementById('connectBtn').style.display = 'none';
+                    document.getElementById('disconnectBtn').style.display = 'flex';
+                    document.getElementById('status').classList.add('connected');
+                    document.getElementById('statusText').textContent = 'Connected - Receiving data...';
+                    
+                    startTime = Date.now();
+                    startReading();
+                } catch (err) {
+                    alert('Connection failed: ' + err.message);
+                }
         }
 
         async function startReading() {
