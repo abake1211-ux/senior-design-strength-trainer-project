@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMU Magnitude Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(30, 30, 46, 0.9);
+            border-radius: 20px;
+            padding: 15px;
+            max-width: 1400px;
+            margin: 0 auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid #3b82f6;
+        }
+        .status.connected {
+            background: rgba(34, 197, 94, 0.2);
+            border-color: #22c55e;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-connect { background: #22c55e; color: white; }
+        .btn-disconnect { background: #ef4444; color: white; }
+        .btn-clear { background: #6b7280; color: white; }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .data-box {
+            background: rgba(55, 65, 81, 0.5);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-family: monospace;
+        }
+        .accel { border: 2px solid #3b82f6; }
+        .gyro { border: 2px solid #edf50b; }
+
+        canvas {
+            width: 100%;
+            height: 40vh;
+            background: #0a0a0a;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Accel & Gyro Magnitude</h1>
+
+    <div class="status" id="status">
+        <span id="statusText">Ready</span>
+    </div>
+
+    <div class="controls">
+        <button class="btn-connect" onclick="connectSerial()">Connect</button>
+        <button class="btn-disconnect" onclick="disconnect()">Disconnect</button>
+        <button class="btn-clear" onclick="clearData()">Clear</button>
+    </div>
+
+    <div class="data-grid">
+        <div class="data-box accel">
+            Acceleration Magnitude<br>
+            <span id="accelValue">0.000 g</span>
+        </div>
+        <div class="data-box gyro">
+            Gyroscope Magnitude<br>
+            <span id="gyroValue">0.000 °/s</span>
+        </div>
+    </div>
+
+    <canvas id="accelCanvas"></canvas>
+    <canvas id="gyroCanvas"></canvas>
+</div>
+
+<script>
+let port = null;
+let reader = null;
+
+let timeData = [];
+let accelData = [];
+let gyroData = [];
+let startTime = Date.now();
+let timeWindow = 30;
+
+function draw() {
+    drawSignal(accelData, 'accelCanvas', '#3b82f6', 2);
+    drawSignal(gyroData, 'gyroCanvas', '#edf50b', Math.max(50, ...gyroData.map(v => Math.abs(v))) * 1.2);
+    requestAnimationFrame(draw);
+}
+
+function drawSignal(data, canvasId, color, range) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (data.length < 2) return;
+
+    const now = (Date.now() - startTime) / 1000;
+    const minTime = Math.max(0, now - timeWindow);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    let started = false;
+    for (let i = 0; i < timeData.length; i++) {
+        if (timeData[i] < minTime) continue;
+
+        const x = ((timeData[i] - minTime) / timeWindow) * canvas.width;
+        const y = canvas.height / 2 - (data[i] / range) * (canvas.height / 2 - 20);
+
+        if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+}
+
+async function connectSerial() {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+
+    const decoder = new TextDecoderStream();
+    port.readable.pipeTo(decoder.writable);
+    reader = decoder.readable.getReader();
+
+    document.getElementById('status').classList.add('connected');
+    document.getElementById('statusText').textContent = 'Connected';
+
+    let buffer = '';
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += value;
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        lines.forEach(line => {
+            const parts = line.trim().split(',');
+            if (parts.length === 2) {
+                const a = parseFloat(parts[0]);
+                const g = parseFloat(parts[1]);
+                if (!isNaN(a) && !isNaN(g)) {
+                    const t = (Date.now() - startTime) / 1000;
+                    timeData.push(t);
+                    accelData.push(a);
+                    gyroData.push(g);
+
+                    document.getElementById('accelValue').textContent = a.toFixed(3) + ' g';
+                    document.getElementById('gyroValue').textContent = g.toFixed(3) + ' °/s';
+                }
+            }
+        });
+    }
+}
+
+async function disconnect() {
+    if (reader) await reader.cancel();
+    if (port) await port.close();
+    reader = null;
+    port = null;
+    document.getElementById('statusText').textContent = 'Disconnected';
+}
+
+function clearData() {
+    timeData = [];
+    accelData = [];
+    gyroData = [];
+    startTime = Date.now();
+}
+
+draw();
+</script>
+</body>
+</html>
