@@ -1,16 +1,16 @@
 // ===== INITIALIZATION FUNCTIONS =====
 
-void initBuffers(float seedAy, float seedAz) {
+void initBuffers(float seedA, float seedG) {
   for (int i = 0; i < BUFFER_SIZE; ++i) {
-    ay_history[i] = seedAy;
-    az_history[i] = seedAz;
-    ay_slope_history[i] = 0.0f;
-    az_slope_history[i] = 0.0f;
+    aMag_history[i] = seedA;
+    gMag_history[i] = seedG;
+    aMag_slope_history[i] = 0.0f;
+    gMag_slope_history[i] = 0.0f;
   }
   historyIndex = 0;
   historyFilled = true;
-  ay_phaseSlopeSum = 0.0f;
-  az_phaseSlopeSum = 0.0f;
+  aMag_phaseSlopeSum = 0.0f;
+  gMag_phaseSlopeSum = 0.0f;
   phaseSlopeCount = 0;
 }
 
@@ -34,20 +34,31 @@ void initialize() {
   if (imu.begin() != 0) {
     Serial.println("IMU init fail");
   } else {
-    ax_s = imu.readFloatAccelX();
-    ay_s = imu.readFloatAccelY();
-    az_s = imu.readFloatAccelZ();
 
-    initBuffers(ay_s, az_s);
+    float ax0 = imu.readFloatAccelX();
+    float ay0 = imu.readFloatAccelY();
+    float az0 = imu.readFloatAccelZ();
+    float gx0 = imu.readFloatGyroX();
+    float gy0 = imu.readFloatGyroY();
+    float gz0 = imu.readFloatGyroZ();
+
+    float aMag0 = sqrt(ax0*ax0 + ay0*ay0 + az0*az0);
+    float gMag0 = sqrt(gx0*gx0 + gy0*gy0 + gz0*gz0);
+
+    for (int i = 0; i < 20; i++) {
+      aMag_s = aMagFilter(aMag0);
+      gMag_s = gMagFilter(gMag0);}
+
+    initBuffers(aMag_s, gMag_s);
 
     Serial.println("=== AUTO-DETECTING EXERCISE TRACKER + BLE ===");
     Serial.println("Start exercising - first axis to move determines exercise type");
-    Serial.println("ay_g,az_g,exercise,rep_count,active_phase");
+    Serial.println("aMag_g,gMag_deg/s,exercise,rep_count,active_phase");
   }
 
   lastTick = micros();
-  ay_phaseStartTime = millis();
-  az_phaseStartTime = millis();
+  aMag_phaseStartTime = millis();
+  gMag_phaseStartTime = millis();
   flatPhaseStartTime = millis();
 
   initBLE();

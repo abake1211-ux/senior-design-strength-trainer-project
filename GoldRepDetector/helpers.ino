@@ -33,7 +33,7 @@ void printToSerialMonitorAndBluetooth() {
   char line[80];
   // Create meaningful line
   snprintf(line, sizeof(line), "%.4f,%.4f,%s,%d,%s",
-           ay_s, az_s,
+           aMag_s, gMag_s,
            exerciseTypeToString(currentExercise),
            repCount,
            phaseToString(activePhase));

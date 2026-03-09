@@ -1,25 +1,25 @@
 // ===== DETECTION AND COUNTING FUNCTIONS =====
 
 void updateBufferAndSlopes() {
-  ay_history[historyIndex] = ay_s;
-  az_history[historyIndex] = az_s;
+  aMag_history[historyIndex] = aMag_s;
+  gMag_history[historyIndex] = gMag_s;
 
   int prevIdx = (historyIndex - 1 + BUFFER_SIZE) % BUFFER_SIZE;
   
-  float ay_newSlope = ay_history[historyIndex] - ay_history[prevIdx];
-  float az_newSlope = az_history[historyIndex] - az_history[prevIdx];
+  float aMag_newSlope = aMag_history[historyIndex] - aMag_history[prevIdx];
+  float gMag_newSlope = gMag_history[historyIndex] - gMag_history[prevIdx];
 
-  ay_slope_history[historyIndex] = ay_newSlope;
-  az_slope_history[historyIndex] = az_newSlope;
+  aMag_slope_history[historyIndex] = aMag_newSlope;
+  gMag_slope_history[historyIndex] = gMag_newSlope;
 
-  ay_phaseSlopeSum += ay_newSlope;
-  az_phaseSlopeSum += az_newSlope;
+  aMag_phaseSlopeSum += aMag_newSlope;
+  gMag_phaseSlopeSum += gMag_newSlope;
   phaseSlopeCount++;
 
   if (phaseSlopeCount > PHASE_WINDOW_SLOPES) {
     int oldSlopeIdx = (historyIndex - PHASE_WINDOW_SLOPES + BUFFER_SIZE) % BUFFER_SIZE;
-    ay_phaseSlopeSum -= ay_slope_history[oldSlopeIdx];
-    az_phaseSlopeSum -= az_slope_history[oldSlopeIdx];
+    aMag_phaseSlopeSum -= aMag_slope_history[oldSlopeIdx];
+    gMag_phaseSlopeSum -= gMag_slope_history[oldSlopeIdx];
     phaseSlopeCount--;
   }
 
@@ -27,13 +27,13 @@ void updateBufferAndSlopes() {
   if (historyIndex == 0) historyFilled = true;
 }
 
-float getPhaseSlope(bool useYaxis) {
+float getPhaseSlope(bool useAccel) {
   if (phaseSlopeCount == 0) return 0.0f;
   
-  if (useYaxis) {
-    return ay_phaseSlopeSum / (float)phaseSlopeCount;
+  if (useAccel) {
+    return aMag_phaseSlopeSum / (float)phaseSlopeCount;
   } else {
-    return az_phaseSlopeSum / (float)phaseSlopeCount;
+    return gMag_phaseSlopeSum / (float)phaseSlopeCount;
   }
 }
 
@@ -64,7 +64,7 @@ bool isSlopeConfirmed(InstantaneousSlopeDirection currentState, int count, Insta
 }
 
 // Detect phase for a specific axis
-ConfirmedMotionPhase detectAxisPhase(bool isYaxis, InstantaneousSlopeDirection &currentState, int &slopeCount, 
+ConfirmedMotionPhase detectMeasType(bool isYaxis, InstantaneousSlopeDirection &currentState, int &slopeCount, 
                            ConfirmedMotionPhase &lastPhase, uint32_t &phaseStartTime) {
   float currentSlope = getPhaseSlope(isYaxis);
   updateSlopeState(isYaxis, currentSlope, currentState, slopeCount);
@@ -175,43 +175,44 @@ void updateBenchPressReps(ConfirmedMotionPhase newPhase) {
 // ===== MAIN DETECTION & COUNTING LOGIC =====
 void processExercise() {
   // Always monitor both axes
-  ConfirmedMotionPhase ay_phase = detectAxisPhase(true,  ay_currentSlopeState, ay_slopeDirectionCount, 
-                                        ay_lastPhase, ay_phaseStartTime);
-  ConfirmedMotionPhase az_phase = detectAxisPhase(false, az_currentSlopeState, az_slopeDirectionCount, 
-                                        az_lastPhase, az_phaseStartTime);
+  ConfirmedMotionPhase aMag_phase = detectMeasType(true,  aMag_currentSlopeState, aMag_slopeDirectionCount, 
+                                        aMag_lastPhase, aMag_phaseStartTime);
+  ConfirmedMotionPhase gMag_phase = detectMeasType(false, gMag_currentSlopeState, gMag_slopeDirectionCount, 
+                                        gMag_lastPhase, gMag_phaseStartTime);
   
   // DETECTION MODE: waiting for first axis to move
   if (currentExercise == EXERCISE_DETECTING) {
     // Check if both are still flat
-    if (ay_phase == PHASE_FLAT && az_phase == PHASE_FLAT) {
+    if (aMag_phase == PHASE_FLAT && gMag_phase == PHASE_FLAT) {
       activePhase = PHASE_FLAT;
       return;
     }
     
-    // One axis moved! Determine dominant axis
-    if (az_phase == PHASE_ASCENDING) {
-      // Y-axis moved first → Bicep Curl
+    // Instruement moved! Determine if accel or gyro moved
+    if (gMag_phase == PHASE_ASCENDING) {
+      // Gyro responded → Bicep Curl
       currentExercise = EXERCISE_BICEP_CURL;
-      activePhase = ay_phase;
-      Serial.println("EXERCISE_DETECTED: BICEP_CURL (Y-axis active)");
-    } else if (az_phase == PHASE_DESCENDING) {
-      // Z-axis moved first → Bench Press
+      activePhase = gMag_phase;
+      Serial.println("EXERCISE_DETECTED: BICEP_CURL (Gyroscope active)");
+    } else if (aMag_phase == PHASE_ASCENDING) {
+      // Accel moved first → Bench Press
       currentExercise = EXERCISE_BENCH_PRESS;
-      activePhase = az_phase;
-      Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Z-axis active)");
+      activePhase = aMag_phase;
+      Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Accelerometer active)");
     } else {
       // Both moved simultaneously - pick the one with larger slope magnitude
-      float ay_slope = fabs(getPhaseSlope(true));
-      float az_slope = fabs(getPhaseSlope(false));
+      // THIS SHOULD BE CHANGED TO COMPARE SOMETHING LIKE DURATION OR AREA UNDER CURVE
+      float aMag_slope = fabs(getPhaseSlope(true));
+      float gMag_slope = fabs(getPhaseSlope(false));
       
-      if (ay_slope > az_slope) {
+      if (aMag_slope < gMag_slope) {
         currentExercise = EXERCISE_BICEP_CURL;
-        activePhase = ay_phase;
-        Serial.println("EXERCISE_DETECTED: BICEP_CURL (Y-axis larger slope)");
+        activePhase = gMag_phase;
+        Serial.println("EXERCISE_DETECTED: BICEP_CURL (Gyro larger slope)");
       } else {
         currentExercise = EXERCISE_BENCH_PRESS;
-        activePhase = az_phase;
-        Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Z-axis larger slope)");
+        activePhase = gMag_phase;
+        Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Accel larger slope)");
       }
     }
     
@@ -222,9 +223,9 @@ void processExercise() {
   
   // ACTIVE MODE: count reps on dominant axis
   if (currentExercise == EXERCISE_BICEP_CURL) {
-    activePhase = ay_phase;
+    activePhase = gMag_phase;
   } else {  // BENCH_PRESS
-    activePhase = az_phase;
+    activePhase = aMag_phase;
   }
   
   // Check for 10-second flat timeout → return to detection mode
@@ -258,10 +259,19 @@ void handleDetection() {
   float ax = imu.readFloatAccelX();
   float ay = imu.readFloatAccelY();
   float az = imu.readFloatAccelZ();
+  float gx = imu.readFloatGyroX();
+  float gy = imu.readFloatGyroY();
+  float gz = imu.readFloatGyroZ();
 
-  ax_s += ALPHA * (ax - ax_s);
-  ay_s += ALPHA * (ay - ay_s);
-  az_s += ALPHA * (az - az_s);
+  float aMag = sqrt(ax*ax + ay*ay + az*az);
+  float gMag = sqrt(gx*gx + gy*gy + gz*gz);
+  
+  // Median filter
+  float aMag_m = aMed(aMag);
+  float gMag_m = gMed(gMag);
+
+  aMag_s = aMagFilter(aMag);
+  gMag_s = gMagFilter(gMag);
 
   updateBufferAndSlopes();
   processExercise();
