@@ -75,8 +75,8 @@ void printToSerialMonitorAndBluetooth() {
     // CSV line over Serial + BLE: ay,az,exercise,repCount,activePhase
   char line[80];
   // Create meaningful line
-  snprintf(line, sizeof(line), "%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
-           timestamp, ax, ay, aSquare, gSquare, aMWI, gMWI);
+  snprintf(line, sizeof(line), "%d,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f",
+           timestamp, ax, ay, az, gx, gy, gz, aMag, gMag, aMag_s, gMag_s, aSquare, gSquare, aMWI, gMWI);
   // Print meaningful line to Serial Monitor
   Serial.println(line);
   
