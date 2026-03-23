@@ -74,9 +74,9 @@ float updateMWI(float newSample, float* buffer, float &sum, int &index) {
 void printToSerialMonitorAndBluetooth() {
     // CSV line over Serial + BLE: ay,az,exercise,repCount,activePhase
   char line[80];
-  // Create meaningful line
-  snprintf(line, sizeof(line), "%d,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f",
-           timestamp, ax, ay, az, gx, gy, gz, aMag, gMag, aMag_s, gMag_s, aSquare, gSquare, aMWI, gMWI);
+  // Create meaningful line (character limit only allows for 5 vars)
+  snprintf(line, sizeof(line), "%d,%.5f,%.5f,%.5f,%.5f",
+           timestamp, aMag, gMag, aMag_s, gMag_s);
   // Print meaningful line to Serial Monitor
   Serial.println(line);
   

@@ -45,7 +45,7 @@ float gSum = 0;
 int gIndex = 0;
 
 // // ===== TIMING =====
-const uint32_t SAMPLE_INTERVAL_US = 10000;  // ~100 Hz sampling
+const uint32_t SAMPLE_INTERVAL_US = 400;  // ~100 Hz sampling; Moved to 400 Hz for quick data download
 uint32_t lastTick = 0;
 
 int timestamp;
