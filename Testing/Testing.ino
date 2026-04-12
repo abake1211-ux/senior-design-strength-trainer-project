@@ -34,7 +34,7 @@ auto gMagFilter = butter<4>(FN);
 auto aHighPassBase = butter<4>(FN_HP);   // low-pass at 0.5 Hz for HPF trick
 auto gHighPassBase = butter<4>(FN_HP);
 // mwi
-const int MWI_SIZE = 85;
+const int MWI_SIZE = 10;
 // accel mwi
 float aBuffer[MWI_SIZE] = {0};
 float aSum = 0;
@@ -45,7 +45,7 @@ float gSum = 0;
 int gIndex = 0;
 
 // // ===== TIMING =====
-const uint32_t SAMPLE_INTERVAL_US = 400;  // ~100 Hz sampling; Moved to 400 Hz for quick data download
+const uint32_t SAMPLE_INTERVAL_US = 400;  // Sampling rate: 2500 Hz for quick data download (12.5x speed)
 uint32_t lastTick = 0;
 
 int timestamp;
@@ -55,86 +55,44 @@ float aMag, gMag;
 float aMWI, gMWI;
 float aSquare, gSquare;
 
-// ===== EMA SMOOTHING =====
-// const float ALPHA = 0.15f;
+// --- Pan-Tompkins Variables --- //
 
-// // ===== SLOPE DETECTION PARAMETERS =====
-// const float DESCENDING_SLOPE_THRESHOLD = -0.010f;
-// const float ASCENDING_SLOPE_THRESHOLD  =  0.010f;
-// const int MIN_SLOPE_SAMPLES = 10;
-// const uint32_t MIN_PHASE_DURATION_MS = 300;
+// --- ACCEL ---
+float SPKI_a = 0, NPKI_a = 0, THRESHOLD_a = 0;
+float prev2_a = 0, prev1_a = 0, current_a = 0;
 
-// ===== EXERCISE DETECTION =====
-// enum ExerciseType { 
-//   EXERCISE_DETECTING,     // In detection mode
-//   EXERCISE_BICEP_CURL,    // Y-axis dominant
-//   EXERCISE_BENCH_PRESS    // Z-axis dominant
-// };
+// --- GYRO ---
+float SPKI_g = 0, NPKI_g = 0, THRESHOLD_g = 0;
+float prev2_g = 0, prev1_g = 0, current_g = 0;
 
-// ExerciseType currentExercise = EXERCISE_DETECTING;
+// Timing
+unsigned long lastRepTime = 0;
+unsigned long startTime = 0;
 
-// const uint32_t FLAT_RESET_DURATION_MS = 5000;  // 5 seconds
-// uint32_t flatPhaseStartTime = 0;
+// Rep count
+int repCount = 0;
+bool peakA;
+bool peakG;
 
-// // ===== CIRCULAR BUFFER PARAMS =====
-// const int BUFFER_SIZE = 32;
-// const int PHASE_WINDOW_SLOPES = 5;
+// Refractory
+const int REFRACTORY_PERIOD = 100;
 
-// // Separate buffers for each axis
-// float aMag_history[BUFFER_SIZE];
-// float gMag_history[BUFFER_SIZE];
-// float aMag_slope_history[BUFFER_SIZE];
-// float gMag_slope_history[BUFFER_SIZE];
-// int historyIndex = 0;
-// bool historyFilled = false;
+// --- ACCEL threshold state ---
+float peakt_a = 0, peaki_a = 0;
+// unsigned long lastQRS_a = 0;  // for cc equivalent (time-based reset)
+size_t cc_a = 0;
 
-// // Running sums for slope windows
-// float aMag_phaseSlopeSum = 0.0f;
-// float gMag_phaseSlopeSum = 0.0f;
-// int phaseSlopeCount = 0;
+// --- GYRO threshold state ---
+float peakt_g = 0, peaki_g = 0;
+// unsigned long lastQRS_g = 0;
+size_t cc_g = 0;
 
-// // ===== SLOPE STATE TRACKING =====
-// enum InstantaneousSlopeDirection { FLAT, DESCENDING, ASCENDING };
-// // ===== PHASE TRACKING =====
-// enum ConfirmedMotionPhase { PHASE_UNKNOWN, PHASE_ASCENDING, PHASE_DESCENDING, PHASE_FLAT };
+#define LOOKBACK_N 10
+float lookback_a[LOOKBACK_N] = {0};
+float lookback_g[LOOKBACK_N] = {0};
 
-// // Accel slope tracking
-// InstantaneousSlopeDirection aMag_currentSlopeState = FLAT;
-// int aMag_slopeDirectionCount = 0;
-// ConfirmedMotionPhase aMag_lastPhase = PHASE_FLAT;
-// uint32_t aMag_phaseStartTime = 0;
-
-// // Gyro slope tracking
-// InstantaneousSlopeDirection gMag_currentSlopeState = FLAT;
-// int gMag_slopeDirectionCount = 0;
-// ConfirmedMotionPhase gMag_lastPhase = PHASE_FLAT;
-// uint32_t gMag_phaseStartTime = 0;
-
-// // Active measurement phase (the one we're counting reps on)
-// ConfirmedMotionPhase activePhase = PHASE_FLAT;
-// ConfirmedMotionPhase previousPhase = PHASE_FLAT;
-
-// // ===== REP COUNTER =====
-// int repCount = 0;
-
-// // Bicep curl rep state
-// enum BicepRepState { 
-//   BICEP_WAITING,
-//   BICEP_ASCENDING,
-//   BICEP_TOP_FLAT,
-//   BICEP_DESCENDING
-// };
-// BicepRepState bicepRepState = BICEP_WAITING;
-
-// // Bench press valley state
-// enum ValleyState { 
-//   VALLEY_IDLE,
-//   VALLEY_SAW_DESC,
-//   VALLEY_SAW_FLAT1,
-//   VALLEY_SAW_ASC
-// };
-// ValleyState valleyState = VALLEY_IDLE;
-
+// Init
+bool initialized = false;
 
 // ===== SETUP =====
 void setup() {

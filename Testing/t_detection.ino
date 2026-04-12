@@ -1,260 +1,103 @@
 // ===== DETECTION AND COUNTING FUNCTIONS =====
 
-// void updateBufferAndSlopes() {
-//   aMag_history[historyIndex] = aMag_s;
-//   gMag_history[historyIndex] = gMag_s;
+// ---------------------------------------------------------------------------------
+// Adaptive threshold detector — Accel
+// ---------------------------------------------------------------------------------
+bool processPeak_accel(float current_a, float prev1_a, float prev2_a) {
+    bool repDetected = false;
+    unsigned long currentTime = millis();
 
-//   int prevIdx = (historyIndex - 1 + BUFFER_SIZE) % BUFFER_SIZE;
-  
-//   float aMag_newSlope = aMag_history[historyIndex] - aMag_history[prevIdx];
-//   float gMag_newSlope = gMag_history[historyIndex] - gMag_history[prevIdx];
+    // Shift lookback buffer
+    for (int i = LOOKBACK_N - 1; i > 0; i--) { lookback_a[i] = lookback_a[i-1]; }
+    lookback_a[0] = current_a;
+    float lookback = lookback_a[LOOKBACK_N - 1]; // oldest sample
 
-//   aMag_slope_history[historyIndex] = aMag_newSlope;
-//   gMag_slope_history[historyIndex] = gMag_newSlope;
+    cc_a++;
+    if (cc_a > 100000) {
+        cc_a = 0;
+        THRESHOLD_a = 0;
+        SPKI_a = 0;
+        NPKI_a = 0;
+        peakt_a = 0;
+        peaki_a = 0;
+    }
 
-//   aMag_phaseSlopeSum += aMag_newSlope;
-//   gMag_phaseSlopeSum += gMag_newSlope;
-//   phaseSlopeCount++;
+    // Track local peak using longer lookback
+    if (current_a > lookback && current_a > peakt_a) { peakt_a = current_a; }
 
-//   if (phaseSlopeCount > PHASE_WINDOW_SLOPES) {
-//     int oldSlopeIdx = (historyIndex - PHASE_WINDOW_SLOPES + BUFFER_SIZE) % BUFFER_SIZE;
-//     aMag_phaseSlopeSum -= aMag_slope_history[oldSlopeIdx];
-//     gMag_phaseSlopeSum -= gMag_slope_history[oldSlopeIdx];
-//     phaseSlopeCount--;
-//   }
+    // Detect end of candidate peak using longer lookback
+    if (current_a <= lookback && current_a < 0.75f * peakt_a) {
+        peaki_a = peakt_a;
 
-//   historyIndex = (historyIndex + 1) % BUFFER_SIZE;
-//   if (historyIndex == 0) historyFilled = true;
-// }
+        if (peaki_a > THRESHOLD_a) {
+            SPKI_a = 0.125f * peaki_a + 0.875f * SPKI_a;
 
-// float getPhaseSlope(bool useAccel) {
-//   if (phaseSlopeCount == 0) return 0.0f;
-  
-//   if (useAccel) {
-//     return aMag_phaseSlopeSum / (float)phaseSlopeCount;
-//   } else {
-//     return gMag_phaseSlopeSum / (float)phaseSlopeCount;
-//   }
-// }
+            bool outsideRefractory = (currentTime - lastRepTime) > REFRACTORY_PERIOD;
+            if (outsideRefractory) {
+                lastRepTime = currentTime;
+                cc_a = 0;
+                repCount++;
+                repDetected = true;
+            }
+        // Serial.print("peaki_a: "); Serial.print(peaki_a);
+        // Serial.print(" | THRESHOLD_a: "); Serial.print(THRESHOLD_a);
+        // Serial.print(" | SPKI_a: "); Serial.print(SPKI_a);
+        // Serial.print(" | NPKI_a: "); Serial.println(NPKI_a);
+        } else {
+            NPKI_a = 0.125f * peaki_a + 0.875f * NPKI_a;
+        }
 
-// InstantaneousSlopeDirection determineSlopeState(float slope) {
-//   if (slope < DESCENDING_SLOPE_THRESHOLD) {
-//     return DESCENDING;
-//   } else if (slope > ASCENDING_SLOPE_THRESHOLD) {
-//     return ASCENDING;
-//   } else {
-//     return FLAT;
-//   }
-// }
+        THRESHOLD_a = NPKI_a + 0.65f * (SPKI_a - NPKI_a);
+        peakt_a = 0.0f;
+    }
 
-// void updateSlopeState(bool isYaxis, float currentSlope, InstantaneousSlopeDirection &slopeState, int &slopeCount) {
-//   (void)isYaxis; // not used, but kept for symmetry
-//   InstantaneousSlopeDirection newState = determineSlopeState(currentSlope);
+    return repDetected;
+}
 
-//   if (newState == slopeState) {
-//     slopeCount++;
-//   } else {
-//     slopeState = newState;
-//     slopeCount = 1;
-//   }
-// }
+// ---------------------------------------------------------------------------------
+// Adaptive threshold detector — Gyro
+// ---------------------------------------------------------------------------------
+// bool processPeak_gyro(float current_g, float prev1_g, float prev2_g) {
+//     bool repDetected = false;
+//     unsigned long currentTime = millis();
 
-// bool isSlopeConfirmed(InstantaneousSlopeDirection currentState, int count, InstantaneousSlopeDirection expectedState) {
-//   return (currentState == expectedState) && (count >= MIN_SLOPE_SAMPLES);
-// }
-
-// // Detect phase for a specific axis
-// ConfirmedMotionPhase detectMeasType(bool isYaxis, InstantaneousSlopeDirection &currentState, int &slopeCount, 
-//                            ConfirmedMotionPhase &lastPhase, uint32_t &phaseStartTime) {
-//   float currentSlope = getPhaseSlope(isYaxis);
-//   updateSlopeState(isYaxis, currentSlope, currentState, slopeCount);
-  
-//   // Check if enough time has passed for transition
-//   if ((millis() - phaseStartTime) < MIN_PHASE_DURATION_MS) {
-//     return lastPhase;  // No change yet
-//   }
-  
-//   ConfirmedMotionPhase newPhase = lastPhase;
-  
-//   if (isSlopeConfirmed(currentState, slopeCount, ASCENDING)) {
-//     if (lastPhase != PHASE_ASCENDING) {
-//       newPhase = PHASE_ASCENDING;
+//     // Time-based stale signal reset
+//     if ((currentTime - lastQRS_g) > 5000) {
+//         THRESHOLD_g = 0;
+//         SPKI_g = 0;
+//         NPKI_g = 0;
+//         peakt_g = 0;
+//         peaki_g = 0;
+//         lastQRS_g = currentTime;
 //     }
-//   } else if (isSlopeConfirmed(currentState, slopeCount, DESCENDING)) {
-//     if (lastPhase != PHASE_DESCENDING) {
-//       newPhase = PHASE_DESCENDING;
-//     }
-//   } else if (isSlopeConfirmed(currentState, slopeCount, FLAT)) {
-//     if (lastPhase != PHASE_FLAT) {
-//       newPhase = PHASE_FLAT;
-//     }
-//   }
-  
-//   if (newPhase != lastPhase) {
-//     phaseStartTime = millis();
-//     lastPhase = newPhase;
-//   }
-  
-//   return newPhase;
-// }
 
-// // ===== BICEP CURL REP COUNTER =====
-// void updateBicepCurlReps(ConfirmedMotionPhase newPhase) {
-//   // Bicep curl state machine: FLAT → ASC → FLAT(top) → DESC → FLAT(bottom)
-//   switch (bicepRepState) {
-//     case BICEP_WAITING:
-//       if (newPhase == PHASE_ASCENDING) {
-//         bicepRepState = BICEP_ASCENDING;
-//       }
-//       break;
-      
-//     case BICEP_ASCENDING:
-//       if (newPhase == PHASE_FLAT) {
-//         bicepRepState = BICEP_TOP_FLAT;
-//       }
-//       break;
-      
-//     case BICEP_TOP_FLAT:
-//       if (newPhase == PHASE_DESCENDING) {
-//         bicepRepState = BICEP_DESCENDING;
-//       } else if (newPhase == PHASE_ASCENDING) {
-//         bicepRepState = BICEP_ASCENDING;
-//       }
-//       break;
-      
-//     case BICEP_DESCENDING:
-//       if (newPhase == PHASE_FLAT) {
-//         repCount++;
-//         Serial.print("REP_COUNTED,total=");
-//         Serial.println(repCount);
-//         bicepRepState = BICEP_WAITING;
-//       }
-//       break;
-//   }
-// }
+//     // Track local peak
+//     if (current_g > prev2_g && current_g > peakt_g) { peakt_g = current_g; }
 
-// // ===== BENCH PRESS REP COUNTER =====
-// void updateBenchPressReps(ConfirmedMotionPhase newPhase) {
-//   // Valley detection: DESC → FLAT → ASC → FLAT
-//   switch (valleyState) {
-//     case VALLEY_IDLE:
-//       if (newPhase == PHASE_DESCENDING) {
-//         valleyState = VALLEY_SAW_DESC;
-//       }
-//       break;
-      
-//     case VALLEY_SAW_DESC:
-//       if (newPhase == PHASE_FLAT) {
-//         valleyState = VALLEY_SAW_FLAT1;
-//       } else if (newPhase == PHASE_ASCENDING) {
-//         valleyState = VALLEY_SAW_ASC;
-//       }
-//       break;
-      
-//     case VALLEY_SAW_FLAT1:
-//       if (newPhase == PHASE_ASCENDING) {
-//         valleyState = VALLEY_SAW_ASC;
-//       } else if (newPhase == PHASE_DESCENDING) {
-//         valleyState = VALLEY_SAW_DESC;
-//       }
-//       break;
-      
-//     case VALLEY_SAW_ASC:
-//       if (newPhase == PHASE_FLAT) {
-//         repCount++;
-//         Serial.print("REP_COUNTED,total=");
-//         Serial.println(repCount);
-//         valleyState = VALLEY_IDLE;
-//       } else if (newPhase == PHASE_DESCENDING) {
-//         valleyState = VALLEY_SAW_DESC;
-//       }
-//       break;
-//   }
-// }
+//     // Detect end of candidate peak
+//     if (current_g <= prev2_g && current_g < 0.5f * peakt_g) {
+//         peaki_g = peakt_g;
 
-// // ===== MAIN DETECTION & COUNTING LOGIC =====
-// void processExercise() {
-//   // Always monitor both axes
-//   ConfirmedMotionPhase aMag_phase = detectMeasType(true,  aMag_currentSlopeState, aMag_slopeDirectionCount, 
-//                                         aMag_lastPhase, aMag_phaseStartTime);
-//   ConfirmedMotionPhase gMag_phase = detectMeasType(false, gMag_currentSlopeState, gMag_slopeDirectionCount, 
-//                                         gMag_lastPhase, gMag_phaseStartTime);
-  
-//   // DETECTION MODE: waiting for first axis to move
-//   if (currentExercise == EXERCISE_DETECTING) {
-//     // Check if both are still flat
-//     if (aMag_phase == PHASE_FLAT && gMag_phase == PHASE_FLAT) {
-//       activePhase = PHASE_FLAT;
-//       return;
-//     }
-    
-//     // Instruement moved! Determine if accel or gyro moved
-//     if (gMag_phase == PHASE_ASCENDING) {
-//       // Gyro responded → Bicep Curl
-//       currentExercise = EXERCISE_BICEP_CURL;
-//       activePhase = gMag_phase;
-//       Serial.println("EXERCISE_DETECTED: BICEP_CURL (Gyroscope active)");
-//     } else if (aMag_phase == PHASE_ASCENDING) {
-//       // Accel moved first → Bench Press
-//       currentExercise = EXERCISE_BENCH_PRESS;
-//       activePhase = aMag_phase;
-//       Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Accelerometer active)");
-//     } else {
-//       // Both moved simultaneously - pick the one with larger slope magnitude
-//       // THIS SHOULD BE CHANGED TO COMPARE SOMETHING LIKE DURATION OR AREA UNDER CURVE
-//       float aMag_slope = fabs(getPhaseSlope(true));
-//       float gMag_slope = fabs(getPhaseSlope(false));
-      
-//       if (aMag_slope < gMag_slope) {
-//         currentExercise = EXERCISE_BICEP_CURL;
-//         activePhase = gMag_phase;
-//         Serial.println("EXERCISE_DETECTED: BICEP_CURL (Gyro larger slope)");
-//       } else {
-//         currentExercise = EXERCISE_BENCH_PRESS;
-//         activePhase = gMag_phase;
-//         Serial.println("EXERCISE_DETECTED: BENCH_PRESS (Accel larger slope)");
-//       }
-//     }
-    
-//     flatPhaseStartTime = millis();
-//     previousPhase = activePhase;
-//     return;
-//   }
-  
-//   // ACTIVE MODE: count reps on dominant axis
-//   if (currentExercise == EXERCISE_BICEP_CURL) {
-//     activePhase = gMag_phase;
-//   } else {  // BENCH_PRESS
-//     activePhase = aMag_phase;
-//   }
-  
-//   // Check for 10-second flat timeout → return to detection mode
-//   if (activePhase == PHASE_FLAT) {
-//     if (previousPhase != PHASE_FLAT) {
-//       // Just entered flat
-//       flatPhaseStartTime = millis();
-//     } else if ((millis() - flatPhaseStartTime) >= FLAT_RESET_DURATION_MS) {
-//       // Been flat for 10+ seconds
-//       resetToDetectionMode();
-//       return;
-//     }
-//   } else {
-//     // Not flat, update timer
-//     flatPhaseStartTime = millis();
-//   }
-  
-//   // Update rep counter when phase changes
-//   if (activePhase != previousPhase) {
-//     if (currentExercise == EXERCISE_BICEP_CURL) {
-//       updateBicepCurlReps(activePhase);
-//     } else {  // BENCH_PRESS
-//       updateBenchPressReps(activePhase);
-//     }
-//   }
-  
-//   previousPhase = activePhase;
-// }
+//         if (peaki_g > THRESHOLD_g) {
+//             SPKI_g = 0.125f * peaki_g + 0.875f * SPKI_g;
 
+//             bool outsideRefractory = (currentTime - lastRepTime) > REFRACTORY_PERIOD;
+//             if (outsideRefractory) {
+//                 lastRepTime = currentTime;
+//                 lastQRS_g = currentTime;
+//                 repCount++;
+//                 repDetected = true;
+//             }
+//         } else {
+//             NPKI_g = 0.125f * peaki_g + 0.875f * NPKI_g;
+//         }
+
+//         THRESHOLD_g = NPKI_g + 0.25f * (SPKI_g - NPKI_g);
+//         peakt_g = 0.0f;
+//     }
+
+//     return repDetected;
+// }
 
 
 void handleDetection() {
@@ -281,6 +124,38 @@ void handleDetection() {
     // --- MOVING WINDOW INTEGRATION --- //
     aMWI = updateMWI(aSquare, aBuffer, aSum, aIndex);
     gMWI = updateMWI(gSquare, gBuffer, gSum, gIndex);
+
+    // Update current values
+    current_a = aMWI;
+    current_g = gMWI;
+
+    // --- Initialization ---
+    // if (!initialized) {
+    //     if (millis() - startTime < 2000) {
+    //         initializeThresholds(current_a, current_g);
+    //         // initialized = true;
+    //     } else {
+    //         initialized = true;
+    //     }
+    // }
+
+    if (!initialized) {
+      initializeThresholds(current_a, current_g);
+      initialized = true;
+    }
+
+// --- Peak detection and threshold (called every sample) ---
+    if (initialized) {
+        peakA = processPeak_accel(current_a, prev1_a, prev2_a);
+        // peakG = processPeak_gyro(current_g, prev1_g, prev2_g);
+    } 
+
+    // --- Shift memory ---
+    prev2_a = prev1_a;
+    prev1_a = current_a;
+
+    prev2_g = prev1_g;
+    prev1_g = current_g;
     
 
   } else {
@@ -289,9 +164,6 @@ void handleDetection() {
     while (1); // stop after replay
 
   }
-
-  // updateBufferAndSlopes();
-  // processExercise();
 
 // ===== PRINT STATEMENTS =====
   printToSerialMonitorAndBluetooth();

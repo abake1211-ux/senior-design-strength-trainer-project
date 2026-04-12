@@ -1,4 +1,4 @@
-// ===== HELPER FUNCTIONS =====
+    // ===== HELPER FUNCTIONS =====
 
 // const char* exerciseTypeToString(ExerciseType e) {
 //   switch (e) {
@@ -28,11 +28,18 @@
 //   flatPhaseStartTime = millis();
 // }
 
+bool isPeak(float prev2, float prev1, float current) {
+    return (prev1 > prev2) && (prev1 > current);
+}
+
 // ===== Replay IMU from CSV =====
 bool readNextIMU(int &timestamp, float &ax, float &ay, float &az,
                  float &gx, float &gy, float &gz) {
 
     if (!imuFile.available()) return false;
+
+    // Skip first line
+    imuFile.readStringUntil('\n');
 
     String line = imuFile.readStringUntil('\n');
     line.trim();
@@ -75,8 +82,8 @@ void printToSerialMonitorAndBluetooth() {
     // CSV line over Serial + BLE: ay,az,exercise,repCount,activePhase
   char line[80];
   // Create meaningful line (character limit only allows for 5 vars)
-  snprintf(line, sizeof(line), "%d,%.5f,%.5f,%.5f,%.5f",
-           timestamp, aMag, gMag, aMag_s, gMag_s);
+  snprintf(line, sizeof(line), "%d,%.5f,%.5f,%.5f,%d",
+           timestamp, aMag, aMWI, THRESHOLD_a, repCount);
   // Print meaningful line to Serial Monitor
   Serial.println(line);
   
