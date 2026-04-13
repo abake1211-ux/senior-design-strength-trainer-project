@@ -12,7 +12,8 @@
 #include <Filters.h>
 #include <Filters/Butterworth.hpp>
 #include <AH/Timing/MillisMicrosTimer.hpp>
-#include <SPI.h>
+// #include <SPI.h>
+#include <LSM6DS3.h> 
 
 // ===== IMU =====
 LSM6DS3 imu(I2C_MODE, 0x6A);
